@@ -1,36 +1,14 @@
-def choose_strategy(tracker, agent, bankroll, confidence_enabled=True):
+def choose_strategy(bankroll, history, accuracy):
     """
-    Chooses a roulette strategy based on bankroll health, streak history,
-    and optionally reinforcement learning alignment accuracy.
-
-    Args:
-        tracker: RouletteTracker instance with spin/streak data
-        agent: RLAgent instance with accuracy tracking
-        bankroll (float): current bankroll
-        confidence_enabled (bool): whether to return confidence score
-
-    Returns:
-        tuple: (strategy_name: str, confidence: float)
+    Choose a betting strategy based on current bankroll, spin history, and agent accuracy.
+    
+    Returns one of: "Flat", "Martingale", "Paroli", "Hybrid"
     """
-    win_streak = tracker.get_current_win_streak()
-    loss_streak = tracker.get_current_loss_streak()
-    rl_accuracy = agent.get_accuracy()
-
-    # Priority Logic
-    if bankroll < 10:
-        strategy = "Flat"
-        confidence = 0.95
-    elif loss_streak >= 3:
-        strategy = "Martingale"
-        confidence = 0.8
-    elif win_streak >= 3:
-        strategy = "Paroli"
-        confidence = 0.75
-    elif rl_accuracy > 0.7:
-        strategy = "Hybrid"
-        confidence = 0.85
+    if accuracy > 0.7 and bankroll > 50:
+        return "Paroli"
+    elif bankroll < 20:
+        return "Flat"
+    elif len(history) >= 5 and accuracy < 0.5:
+        return "Martingale"
     else:
-        strategy = "Flat"
-        confidence = 0.65
-
-    return (strategy, confidence) if confidence_enabled else strategy
+        return "Hybrid"
