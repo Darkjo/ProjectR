@@ -7,6 +7,8 @@ from strategies import StrategyEngine
 from strategy_selector import choose_strategy
 from performance_tracker import StrategyPerformanceTracker
 from agent import RLAgent
+from datetime import datetime
+import csv
 
 class RouletteApp:
     def __init__(self, root):
@@ -24,6 +26,9 @@ class RouletteApp:
         self.bankroll = 100.0
         self.initial_bet = 1.0
         self.bankroll_history = [self.bankroll]
+        self.total_profit = 0.0
+        self.win_streak = 0
+        self.best_streak = 0
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=BOTH, expand=True)
@@ -48,6 +53,9 @@ class RouletteApp:
         self.bet_entry.grid(row=1, column=1)
         self.bet_entry.insert(0, "1")
 
+        self.streak_label = ttk.Label(bankroll_frame, text="Streak: 0 | Best: 0")
+        self.streak_label.grid(row=2, column=0, columnspan=2)
+
         mode_frame = ttk.LabelFrame(self.game_tab, text="Mode")
         mode_frame.pack(padx=10, pady=5)
         self.auto_toggle = ttk.Checkbutton(mode_frame, text="Auto Mode", variable=self.auto_mode, command=self.toggle_auto_mode)
@@ -66,6 +74,8 @@ class RouletteApp:
         ttk.Button(input_frame, text="Strategy Stats", command=self.show_strategy_stats).grid(row=0, column=4, padx=5)
         ttk.Button(input_frame, text="Spin Stats", command=self.show_spin_stats).grid(row=0, column=5, padx=5)
         ttk.Button(input_frame, text="Agent Stats", command=self.show_agent_stats).grid(row=0, column=6, padx=5)
+        ttk.Button(input_frame, text="Analyze Bias", command=self.analyze_bias).grid(row=0, column=7, padx=5)
+        ttk.Button(input_frame, text="Export CSV", command=self.export_csv).grid(row=0, column=8, padx=5)
 
         ttk.Label(input_frame, text="Bet Type:").grid(row=1, column=0, pady=5)
         self.bet_type = ttk.Combobox(input_frame, values=["Mixed", "Number", "Dozen", "Column"], width=10)
@@ -93,10 +103,7 @@ class RouletteApp:
         self.canvas.draw()
 
     def toggle_auto_mode(self):
-        if self.auto_mode.get():
-            self.output.insert("end", "Auto Mode ENABLED\n")
-        else:
-            self.output.insert("end", "Auto Mode DISABLED\n")
+        self.output.insert("end", "Auto Mode ENABLED\n" if self.auto_mode.get() else "Auto Mode DISABLED\n")
         self.output.see("end")
 
     def show_strategy_stats(self):
@@ -114,6 +121,28 @@ class RouletteApp:
         self.output.insert("end", f"Agent Accuracy: {self.agent.get_accuracy()*100:.2f}%\n")
         self.output.see("end")
 
+    def analyze_bias(self):
+        chi_stat, p_val = self.tracker.chi_square_test()
+        z_scores = self.tracker.z_score_trend()
+        moving_avg = self.tracker.moving_average()
+
+        self.output.insert("end", "\n🧪 Statistical Bias Analysis:\n")
+        self.output.insert("end", f"Chi-Square Statistic: {chi_stat}, p-value: {p_val}\n")
+        if z_scores:
+            self.output.insert("end", f"Top Z-Score Deviations: {z_scores}\n")
+        if moving_avg:
+            self.output.insert("end", f"Moving Average (Last 5): {moving_avg[-5:]}\n")
+        self.output.see("end")
+
+    def export_csv(self):
+        with open("roulette_history.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Spin #", "Number", "Strategy", "Win", "Payout"])
+            for i, entry in enumerate(self.agent.performance_log):
+                writer.writerow([i + 1, entry['number'], entry['strategy'], entry['win'], entry['payout']])
+        self.output.insert("end", "📁 History exported to roulette_history.csv\n")
+        self.output.see("end")
+
     def add_spin(self):
         try:
             number = int(self.entry.get())
@@ -124,25 +153,35 @@ class RouletteApp:
                 bankroll = float(self.bankroll_entry.get())
                 strategy = self.agent.get_recommendation(bankroll, confidence=self.tracker.confidence)
                 self.strategy_label.config(text=f"Strategy: {strategy}")
-                self.output.insert("end", f"🧠 Suggested Strategy: {strategy}\n")
 
-                self.output.insert("end", f"🎯 Recommended Dozen: {self.tracker.predicted_dozen}\n")
-                self.output.insert("end", f"🎯 Recommended Column: {self.tracker.predicted_column}\n")
-                self.output.insert("end", f"🔥 Top 5 Frequent Numbers: {self.tracker.predicted_numbers}\n")
-                self.output.insert("end", f"📈 Confidence Level: {self.tracker.confidence * 100:.1f}%\n")
+                self.output.insert("end", f"\n⏱ {datetime.now().strftime('%H:%M:%S')} | ─────────────────────\n")
+                self.output.insert("end", "🔍 Prediction Summary:\n")
+                self.output.insert("end", f"🧠 Suggested Strategy: {strategy}\n")
+                self.output.insert("end", f"🎯 Dozen: {self.tracker.predicted_dozen}\n")
+                self.output.insert("end", f"🎯 Column: {self.tracker.predicted_column}\n")
+                self.output.insert("end", f"🔥 Top 5 Numbers: {self.tracker.predicted_numbers}\n")
+                self.output.insert("end", f"📈 Confidence: {self.tracker.confidence * 100:.1f}%\n")
 
                 bet_type = self.bet_type.get()
                 win = self.tracker.evaluate_prediction(number, bet_type)
 
                 bet_amount = float(self.bet_entry.get())
                 self.bankroll += bet_amount if win else -bet_amount
+                self.total_profit += bet_amount if win else -bet_amount
+                self.win_streak = self.win_streak + 1 if win else 0
+                self.best_streak = max(self.best_streak, self.win_streak)
+
                 self.bankroll_entry.delete(0, 'end')
                 self.bankroll_entry.insert(0, f"{self.bankroll:.2f}")
+                self.streak_label.config(text=f"Streak: {self.win_streak} | Best: {self.best_streak} | Total Profit: ${self.total_profit:.2f}")
+
                 self.performance_tracker.update(strategy, win, bet_amount if win else -bet_amount)
                 self.agent.record_result(number, strategy, win, bet_amount if win else -bet_amount)
                 self.update_chart()
                 self.agent.record_alignment(win)
-                self.output.insert("end", f"Added spin: {number} | {'✅ WIN' if win else '❌ LOSS'} | Bet: ${bet_amount:.2f}\n")
+
+                color = '🟢' if self.tracker.confidence > 0.66 else '🟡' if self.tracker.confidence > 0.33 else '🔴'
+                self.output.insert("end", f"💰 Result: Spin {number} | {color} {'✅ WIN' if win else '❌ LOSS'} | Bet: ${bet_amount:.2f}\n")
                 self.output.see("end")
             else:
                 self.output.insert("end", "Invalid number! Enter 0-36.\n")
@@ -172,6 +211,10 @@ class RouletteApp:
         self.performance_tracker.reset()
         self.update_chart()
         self.tracker.reset()
+        self.total_profit = 0.0
+        self.win_streak = 0
+        self.best_streak = 0
+        self.streak_label.config(text="Streak: 0 | Best: 0 | Total Profit: $0.00")
         for strat in self.strategy_engine.get_strategy_names():
             self.strategy_engine.reset_strategy(strat)
         self.output.insert("end", "🗑️ History reset. Strategies reset.\n")

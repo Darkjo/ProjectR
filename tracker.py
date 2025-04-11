@@ -90,27 +90,28 @@ class RouletteTracker:
         top_number_conf = sum(freq for _, freq in Counter(self.history).most_common(5)) / total_spins if total_spins else 0
         self.confidence = round((dozen_conf + column_conf + top_number_conf) / 3, 2)
 
-    def evaluate_prediction(self, number):
-        is_win = False
-
-        if number in self.predicted_numbers:
-            is_win = True
-
-        if self.predicted_dozen == "1st" and 1 <= number <= 12:
-            is_win = True
-        elif self.predicted_dozen == "2nd" and 13 <= number <= 24:
-            is_win = True
-        elif self.predicted_dozen == "3rd" and 25 <= number <= 36:
-            is_win = True
-
-        if self.predicted_column == "1st" and number in range(1, 37, 3):
-            is_win = True
-        elif self.predicted_column == "2nd" and number in range(2, 37, 3):
-            is_win = True
-        elif self.predicted_column == "3rd" and number in range(3, 37, 3):
-            is_win = True
-
-        return is_win
+    def evaluate_prediction(self, number, bet_type="Mixed"):
+        if bet_type == "Number":
+            return number in self.predicted_numbers
+        if bet_type == "Dozen":
+            if self.predicted_dozen == "1st": return 1 <= number <= 12
+            if self.predicted_dozen == "2nd": return 13 <= number <= 24
+            if self.predicted_dozen == "3rd": return 25 <= number <= 36
+        if bet_type == "Column":
+            if self.predicted_column == "1st": return number in range(1, 37, 3)
+            if self.predicted_column == "2nd": return number in range(2, 37, 3)
+            if self.predicted_column == "3rd": return number in range(3, 37, 3)
+        if bet_type == "Mixed":
+            return (
+                number in self.predicted_numbers or
+                (self.predicted_dozen == "1st" and 1 <= number <= 12) or
+                (self.predicted_dozen == "2nd" and 13 <= number <= 24) or
+                (self.predicted_dozen == "3rd" and 25 <= number <= 36) or
+                (self.predicted_column == "1st" and number in range(1, 37, 3)) or
+                (self.predicted_column == "2nd" and number in range(2, 37, 3)) or
+                (self.predicted_column == "3rd" and number in range(3, 37, 3))
+            )
+        return False
 
     def chi_square_test(self):
         observed = [self.get_color_counts()[c] for c in ['red', 'black', 'green']]
@@ -130,4 +131,4 @@ class RouletteTracker:
     def moving_average(self, window=10):
         if len(self.history) < window:
             return []
-        return [sum(self.history[i-window:i]) / window for i in range(window, len(self.history)+1)]
+        return [sum(self.history[i - window:i]) / window for i in range(window, len(self.history) + 1)]
